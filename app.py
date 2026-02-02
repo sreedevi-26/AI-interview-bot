@@ -1,74 +1,51 @@
 import streamlit as st
-from langchain_ollama import OllamaLLM
+from groq import Groq
+import os
 
-# -------------------------------
-# Load Model (only once)
-# -------------------------------
-@st.cache_resource
-def load_model():
-    return OllamaLLM(model="phi3")
+st.set_page_config(page_title="AI Interview Bot", page_icon="🤖")
 
-llm = load_model()
+# Load API key from Streamlit Secrets
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# -------------------------------
-# Page Title
-# -------------------------------
 st.title("AI Interview Bot 🤖")
 
-# -------------------------------
-# Session State Initialization
-# -------------------------------
+# Session state
 if "question" not in st.session_state:
-    st.session_state.question = None
+    st.session_state.question = ""
 
 if "answer" not in st.session_state:
     st.session_state.answer = ""
 
 if "evaluation" not in st.session_state:
-    st.session_state.evaluation = None
+    st.session_state.evaluation = ""
 
-if "submitted" not in st.session_state:
-    st.session_state.submitted = False
-
-# -------------------------------
-# Role Selection
-# -------------------------------
+# Role selection
 role = st.selectbox(
     "Select Interview Role",
     ["Java Developer", "AI/ML", "DSA", "HR"]
 )
 
-# -------------------------------
-# Start Interview Button
-# -------------------------------
+# Start interview
 if st.button("Start Interview"):
-    with st.spinner("Generating question..."):
-        prompt = f"Ask ONE interview question for a {role}. Do not give the answer."
-        st.session_state.question = llm.invoke(prompt)
+    prompt = f"Ask ONE professional interview question for a {role}. Do not give the answer."
 
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    st.session_state.question = response.choices[0].message.content
+    st.session_state.evaluation = ""
     st.session_state.answer = ""
-    st.session_state.evaluation = None
-    st.session_state.submitted = False
 
-# -------------------------------
-# Show Question
-# -------------------------------
+# Show question
 if st.session_state.question:
     st.subheader("Interviewer Question")
     st.write(st.session_state.question)
 
-    # Answer Input
-    st.session_state.answer = st.text_area(
-        "Your Answer",
-        value=st.session_state.answer
-    )
+    st.session_state.answer = st.text_area("Your Answer")
 
-    # -------------------------------
-    # Submit Answer Button
-    # -------------------------------
     if st.button("Submit Answer"):
-        st.session_state.submitted = True
-
         eval_prompt = f"""
 You are an interviewer.
 
@@ -78,30 +55,20 @@ Question:
 Candidate Answer:
 {st.session_state.answer}
 
-Evaluate the answer and provide:
+Evaluate and provide:
 - Score out of 10
 - Short feedback
-- Missing or weak concepts
+- Missing concepts
 """
 
-        with st.spinner("Evaluating your answer..."):
-            st.session_state.evaluation = llm.invoke(eval_prompt)
+        eval_response = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": eval_prompt}]
+        )
 
-# -------------------------------
-# Show Evaluation
-# -------------------------------
-if st.session_state.submitted and st.session_state.evaluation:
+        st.session_state.evaluation = eval_response.choices[0].message.content
+
+# Show evaluation
+if st.session_state.evaluation:
     st.subheader("Interview Feedback")
     st.write(st.session_state.evaluation)
-
-    # -------------------------------
-    # Next Question Button
-    # -------------------------------
-    if st.button("Next Question"):
-        with st.spinner("Generating next question..."):
-            prompt = f"Ask ONE different interview question for a {role}. Do not give the answer."
-            st.session_state.question = llm.invoke(prompt)
-
-        st.session_state.answer = ""
-        st.session_state.evaluation = None
-        st.session_state.submitted = False
