@@ -38,7 +38,7 @@ def generate_question(role):
         prompt = f"Ask ONE professional interview question for a {role}. Do not give the answer."
 
         response = client.chat.completions.create(
-        "model="llama3-8b-8192",
+        model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": "You are a professional technical interviewer."},
                 {"role": "user", "content": prompt}
@@ -122,5 +122,6 @@ with st.expander("Debug Tools"):
         if test:
             st.success("✅ API Working!")
             st.write(test)
+
 
 
