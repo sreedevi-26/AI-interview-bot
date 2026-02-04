@@ -2,64 +2,46 @@ import streamlit as st
 from groq import Groq
 import os
 
-# ------------------ PAGE CONFIG ------------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="AI Interview Bot", page_icon="🤖")
 
-st.title("AI Interview Bot 🤖")
+# Load API key
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# ------------------ API KEY SETUP ------------------
-api_key = st.secrets.get("GROQ_API_KEY")
-
-if not api_key:
+if not GROQ_API_KEY:
     st.error("❌ GROQ_API_KEY not found. Please add it in Streamlit Secrets.")
     st.stop()
 
-client = Groq(api_key=api_key)
+client = Groq(api_key=GROQ_API_KEY)
 
-# ------------------ SESSION STATE ------------------
-if "question" not in st.session_state:
-    st.session_state.question = ""
+MODEL_NAME = "llama-3.1-8b-instant"
 
-if "answer" not in st.session_state:
-    st.session_state.answer = ""
+# ---------------- FUNCTIONS ----------------
 
-if "evaluation" not in st.session_state:
-    st.session_state.evaluation = ""
-
-# ------------------ ROLE SELECTION ------------------
-role = st.selectbox(
-    "Select Interview Role",
-    ["Java Developer", "AI/ML", "DSA", "HR"]
-)
-
-# ------------------ FUNCTION TO GENERATE QUESTION ------------------
 def generate_question(role):
     try:
-        prompt = f"Ask ONE professional interview question for a {role}. Do not give the answer."
+        prompt = f"Ask one professional technical interview question for a {role}."
 
         response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+            model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": "You are a professional technical interviewer."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=200,
-            timeout=20
+            max_tokens=150
         )
 
         return response.choices[0].message.content
 
     except Exception as e:
-        st.error("BACKEND ERROR:")
-        st.code(str(e))
-        return None
+        return f"❌ Error generating question: {str(e)}"
 
-# ------------------ FUNCTION TO EVALUATE ANSWER ------------------
+
 def evaluate_answer(question, answer):
     try:
-        eval_prompt = f"""
-You are an interviewer.
+        prompt = f"""
+You are an interview evaluator.
 
 Question:
 {question}
@@ -67,62 +49,70 @@ Question:
 Candidate Answer:
 {answer}
 
-Evaluate and provide:
-- Score out of 10
-- Short feedback
-- Missing concepts
+Give a short professional evaluation and a score out of 10.
 """
 
         response = client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a professional interviewer evaluating a candidate."},
-                {"role": "user", "content": eval_prompt}
+                {"role": "system", "content": "You are a professional interviewer."},
+                {"role": "user", "content": prompt}
             ],
             temperature=0.5,
-            max_tokens=400,
-            timeout=20
+            max_tokens=150
         )
 
         return response.choices[0].message.content
 
     except Exception as e:
-        st.error("BACKEND ERROR:")
-        st.code(str(e))
-        return None
+        return f"❌ Error evaluating answer: {str(e)}"
 
-# ------------------ START INTERVIEW ------------------
+
+def test_api():
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "user", "content": "Say 'API working'"}
+            ],
+            max_tokens=10
+        )
+        return "✅ API Working!"
+    except Exception as e:
+        return f"❌ API Error: {str(e)}"
+
+
+# ---------------- UI ----------------
+
+st.title("AI Interview Bot 🤖")
+
+role = st.selectbox(
+    "Select Interview Role",
+    ["Java Developer", "Python Developer", "Data Analyst", "Web Developer"]
+)
+
+if "question" not in st.session_state:
+    st.session_state.question = ""
+
 if st.button("Start Interview"):
     st.session_state.question = generate_question(role)
-    st.session_state.answer = ""
-    st.session_state.evaluation = ""
 
-# ------------------ SHOW QUESTION ------------------
 if st.session_state.question:
-    st.subheader("Interviewer Question")
+    st.subheader("Interview Question")
     st.write(st.session_state.question)
 
-    st.session_state.answer = st.text_area("Your Answer")
+    answer = st.text_area("Your Answer")
 
     if st.button("Submit Answer"):
-        st.session_state.evaluation = evaluate_answer(
-            st.session_state.question,
-            st.session_state.answer
-        )
+        if answer.strip():
+            result = evaluate_answer(st.session_state.question, answer)
+            st.subheader("Evaluation Result")
+            st.write(result)
+        else:
+            st.warning("⚠️ Please write an answer before submitting")
 
-# ------------------ SHOW EVALUATION ------------------
-if st.session_state.evaluation:
-    st.subheader("Interview Feedback")
-    st.write(st.session_state.evaluation)
+# ---------------- DEBUG ----------------
 
-# ------------------ TEST API BUTTON ------------------
 with st.expander("Debug Tools"):
     if st.button("Test API Connection"):
-        test = generate_question("DSA")
-        if test:
-            st.success("✅ API Working!")
-            st.write(test)
-
-
-
-
+        st.write(test_api())
